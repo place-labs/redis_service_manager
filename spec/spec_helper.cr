@@ -1,6 +1,10 @@
 require "spec"
 require "../src/redis_service_manager"
 
+REDIS_HOST = ENV["REDIS_HOST"]? || "localhost"
+REDIS_PORT = (ENV["REDIS_PORT"]? || "6379").to_i
+REDIS_URL  = "redis://#{REDIS_HOST}:#{REDIS_PORT}"
+
 # re-open class to add some chaos, not for production use
 class RedisServiceManager
   def chaos_stop : Nil

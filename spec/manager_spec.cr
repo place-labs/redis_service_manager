@@ -1,12 +1,10 @@
 require "./spec_helper"
 
 describe RedisServiceManager do
-  redis_default = "redis://localhost:6379"
-
   it "should join a cluster of one" do
     channel = Channel(Nil).new
 
-    manager = RedisServiceManager.new("spec", "http://localhost:1234/spec1", redis: redis_default, ttl: 4)
+    manager = RedisServiceManager.new("spec", "http://localhost:1234/spec1", redis: REDIS_URL, ttl: 4)
     manager.on_rebalance do |version, _nodes|
       puts "REBALANCING"
       manager.ready(version)
@@ -25,7 +23,7 @@ describe RedisServiceManager do
     channel = Channel(Nil).new
     leader = ""
 
-    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: redis_default, ttl: 4)
+    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: REDIS_URL, ttl: 4)
     node1.ready.should eq(false)
 
     node1.on_rebalance do |version, _nodes|
@@ -44,7 +42,7 @@ describe RedisServiceManager do
     node1.ready.should eq(true)
 
     # Join a second node
-    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: redis_default, ttl: 4)
+    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: REDIS_URL, ttl: 4)
     node2.ready.should eq(false)
 
     node2.on_rebalance do |version, _nodes|
@@ -86,7 +84,7 @@ describe RedisServiceManager do
     channel = Channel(Nil).new
     leader = ""
 
-    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: redis_default, ttl: 4)
+    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: REDIS_URL, ttl: 4)
     node1.ready.should eq(false)
 
     node1.on_rebalance do |version, _nodes|
@@ -105,7 +103,7 @@ describe RedisServiceManager do
     node1.ready.should eq(true)
 
     # Join a second node
-    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: redis_default, ttl: 4)
+    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: REDIS_URL, ttl: 4)
     node2.ready.should eq(false)
 
     node2.on_rebalance do |version, _nodes|
@@ -147,7 +145,7 @@ describe RedisServiceManager do
     channel = Channel(Nil).new
     leader = ""
 
-    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: redis_default, ttl: 4)
+    node1 = RedisServiceManager.new("spec", "http://node1/node1", redis: REDIS_URL, ttl: 4)
     node1.ready.should eq(false)
 
     node1.on_rebalance do |version, _nodes|
@@ -166,7 +164,7 @@ describe RedisServiceManager do
     node1.ready.should eq(true)
 
     # Join a second node
-    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: redis_default, ttl: 4)
+    node2 = RedisServiceManager.new("spec", "http://node2/node2", redis: REDIS_URL, ttl: 4)
     node2.ready.should eq(false)
 
     node2.on_rebalance do |version, _nodes|
@@ -196,7 +194,7 @@ describe RedisServiceManager do
     # node1 goes offline and node3 replaces it
     # ======
     node1.chaos_stop
-    node3 = RedisServiceManager.new("spec", "http://node3/node3", redis: redis_default, ttl: 4)
+    node3 = RedisServiceManager.new("spec", "http://node3/node3", redis: REDIS_URL, ttl: 4)
     node3.ready.should eq(false)
     node3.on_rebalance do |version, _nodes|
       puts "REBALANCING NODE 3"
