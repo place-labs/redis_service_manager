@@ -1,6 +1,6 @@
 # Redis Service Manager
 
-[![Build Status](https://travis-ci.com/place-labs/redis_service_manager.svg?branch=master)](https://travis-ci.com/github/place-labs/redis_service_manager)
+[![Build Status](https://github.com/place-labs/redis_service_manager/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/place-labs/redis_service_manager/actions/workflows/CI.yml)
 
 Maintains a list of services in a cluster and tracks their ready state after a rebalance.
 For use in crystal lang projects.
