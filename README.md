@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.com/place-labs/redis_service_manager.svg?branch=master)](https://travis-ci.com/github/place-labs/redis_service_manager)
 
 Maintains a list of services in a cluster and tracks their ready state after a rebalance.
-For use in crystal lang projects
+For use in crystal lang projects.
 
 ## Installation
 
