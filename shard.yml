@@ -1,0 +1,18 @@
+name: redis_service_manager
+version: 1.0.0
+crystal: ~> 1.0
+
+dependencies:
+  promise:
+    github: spider-gazelle/promise
+
+  ulid:
+    github: place-labs/ulid
+
+  redis-cluster:
+    github: caspiano/redis-cluster.cr
+    version: ">= 0.8.4"
+
+development_dependencies:
+  ameba:
+    github: veelenga/ameba
