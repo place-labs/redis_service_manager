@@ -3,9 +3,6 @@ version: 1.0.0
 crystal: ~> 1.0
 
 dependencies:
-  promise:
-    github: spider-gazelle/promise
-
   ulid:
     github: place-labs/ulid
 

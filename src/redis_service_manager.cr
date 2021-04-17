@@ -1,6 +1,5 @@
 require "log"
 require "ulid"
-require "promise"
 
 class RedisServiceManager
   Log = ::Log.for("redis-service-manager")
