@@ -241,16 +241,19 @@ class RedisServiceManager
 
     # find the leader, as the old leader might be offline
     delete = [] of String
+    leader = false
     new_list.each do |node|
       if @redis.get(node).nil?
         delete << node
         @hash.delete(node)
-      else
-        break
+      elsif !leader
+        # Leader node should validate the whole cluster
+        leader = node == node_key
+        break unless leader
       end
     end
-    new_list = new_list - delete
-    new_list
+
+    new_list - delete
   end
 end
 
