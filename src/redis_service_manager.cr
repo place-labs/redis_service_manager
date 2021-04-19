@@ -180,7 +180,7 @@ class RedisServiceManager < Clustering
   protected def check_cluster_ready(new_list, version)
     node_info = {} of String => NodeInfo
 
-    Log.trace { "as leader, checking for node readiness" }
+    Log.trace { "as leader #{@uri}, checking for node readiness" }
 
     # leader ensures the node hash is up to date
     new_version_required = false
