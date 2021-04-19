@@ -6,7 +6,7 @@ class Clustering::Discovery
     @last_updated = Time.unix(0)
     @mutex = Mutex.new
     @rebalance_callbacks = [] of RendezvousHash ->
-    @cluster.on_rebalance { |nodes, _rebalance_complete_cb| update_node_list(nodes) }
+    @cluster.on_rebalance { |nodes, _rebalance_complete_cb| @mutex.synchronize { update_node_list(nodes) } }
   end
 
   getter last_updated : Time
