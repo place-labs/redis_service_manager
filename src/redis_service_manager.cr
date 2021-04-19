@@ -243,6 +243,13 @@ class RedisServiceManager
       end
     end
 
+    # ensure this node is in the node list
+    if !leader && @hash[node_key]? != @uri
+      @hash[node_key] = @uri
+      new_list << node_key
+      new_list.sort!.uniq!
+    end
+
     new_list - delete
   end
 end
