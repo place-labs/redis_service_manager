@@ -8,7 +8,7 @@ REDIS_URL  = "redis://#{REDIS_HOST}:#{REDIS_PORT}"
 # re-open class to add some chaos, not for production use
 class RedisServiceManager
   def chaos_stop : Nil
-    @lock.synchronize { @stopped = true }
+    @lock.synchronize { @registered = false }
     Log.fatal { "CHAOS node stopped unceremoniously" }
   end
 end

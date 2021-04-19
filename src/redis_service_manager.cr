@@ -1,20 +1,25 @@
 require "log"
 require "ulid"
+require "./clustering"
 
-class RedisServiceManager
+class RedisServiceManager < Clustering
   Log = ::Log.for("redis-service-manager")
 
-  def initialize(@service : String, @uri : String, redis : String, @ttl : Int32 = 20)
-    # @redis = Redis.new(url: redis)
+  def initialize(service : String, redis : String, @uri : String = "", @ttl : Int32 = 20)
+    super(service)
+
     @redis = Redis::Client.boot(redis)
     @lock = Mutex.new(:reentrant)
-    @version_key = "{service_#{@service}}_version"
-    @hash_key = "{service_#{@service}}_lookup"
+    @version_key = "{service_#{service}}_version"
+    @hash_key = "{service_#{service}}_lookup"
     @hash = NodeHash.new(@hash_key, @redis)
+    @rendezvous_hash = RendezvousHash.new
   end
 
   getter version : String = ""
-  getter stopped : Bool = true
+  getter? registered : Bool = false
+  getter? watching : Bool = false
+
   getter leader : Bool = false
   getter ready : Bool = false
   getter cluster_ready : Bool = false
@@ -33,18 +38,10 @@ class RedisServiceManager
     @hash.to_h
   end
 
-  # Called when the cluster has changed (version, node list id => URI)
-  def on_rebalance(&@on_rebalance : (String, Hash(String, String)) ->)
-  end
-
-  # Called on leader node when the cluster has stabilised
-  def on_cluster_ready(&@on_cluster_ready : String ->)
-  end
-
-  def start
+  def register : Nil
     @lock.synchronize do
-      return unless @stopped
-      @stopped = false
+      return if @registered
+      @registered = true
       spawn do
         Log.trace { "node started" }
         maintain_registration
@@ -52,9 +49,10 @@ class RedisServiceManager
     end
   end
 
-  def stop : Nil
+  def unregister : Nil
     @lock.synchronize do
-      @stopped = true
+      return unless @registered
+      @registered = false
 
       # remove node and bump the version
       @redis.multi(node_key, reconnect: true) do |transaction|
@@ -92,12 +90,12 @@ class RedisServiceManager
       begin
         # get the current registration for this node and reset the timeout
         @lock.synchronize do
-          break if stopped
+          break unless registered?
 
           if node_info = @redis.getex(node_key, ex: @ttl)
             check_version(NodeInfo.from_json(node_info))
           else
-            register
+            perform_registration
           end
         end
       rescue error
@@ -115,7 +113,7 @@ class RedisServiceManager
     @node_key = "{service_#{@service}}.#{@ulid}"
   end
 
-  protected def register
+  protected def perform_registration
     generate_ulid
     node_info = NodeInfo.new(@uri, @version)
 
@@ -134,7 +132,8 @@ class RedisServiceManager
 
   protected def check_version(node_info : NodeInfo) : Nil
     version = @redis.get(@version_key) || "not-set"
-    new_list = get_new_node_list
+    hash, new_list = get_new_node_list
+    return unless hash
 
     # check for new leader and update URIS
     if new_list != node_keys || node_info.version != version
@@ -147,7 +146,7 @@ class RedisServiceManager
         if node_info.version == version
           version = ULID.generate
           @redis.set(@version_key, version)
-          Log.trace { "as leader, updating cluster to version #{version}" }
+          Log.trace { "as leader #{@uri}, updating cluster to version #{version}" }
         end
       elsif node_info.version == version
         # wait for new version as not the leader
@@ -159,12 +158,12 @@ class RedisServiceManager
       @version = version
 
       # update this nodes registration
-      node_info = NodeInfo.new(@uri, @version)
+      node_info = NodeInfo.new(@uri, version)
       @redis.set(node_key, node_info.to_json, ex: @ttl)
 
       # notify of rebalance
       Log.trace { "cluster details updated, #{new_list.size} nodes detected, requesting rebalance on version #{version} and waiting for ready" }
-      perform_rebalance version
+      perform_rebalance version, hash, new_list
 
       # we'll give the node a tick before checking if cluster ready
       return
@@ -188,21 +187,21 @@ class RedisServiceManager
       else
         @hash.delete(node)
         new_version_required = true
-        Log.trace { "as leader, removed expired node from lookup #{node}" }
+        Log.trace { "as leader #{@uri}, removed expired node from lookup #{node}" }
       end
     end
 
     if new_version_required
       version = ULID.generate
       @redis.set(@version_key, version)
-      Log.trace { "as leader, updating cluster to version #{version}" }
+      Log.trace { "as leader #{@uri}, updating cluster to version #{version}" }
       return
     end
 
     # check node versions are all up to date
     node_info.each do |node, info|
       if info.version != version
-        Log.trace { "as leader, out of date node #{node} => #{info.uri} - node version #{info.version} != current version #{version}" }
+        Log.trace { "as leader #{@uri}, out of date node #{node} => #{info.uri} - node version #{info.version} != current version #{version}" }
         return
       end
     end
@@ -210,28 +209,48 @@ class RedisServiceManager
     # check for cluster ready
     node_info.each do |node, info|
       if !info.ready
-        Log.trace { "as leader, node is not ready: #{node} => #{info.uri}" }
+        Log.trace { "as leader #{@uri}, node is not ready: #{node} => #{info.uri}" }
         return
       end
     end
 
     # update ready state
-    Log.trace { "as leader, cluster is ready, all nodes are reporting ready" }
+    Log.trace { "as leader #{@uri}, cluster is ready, all nodes are reporting ready" }
     @cluster_ready = true
-    if cluster_ready_cb = @on_cluster_ready
-      spawn { cluster_ready_cb.call(version) }
+    cluster_stable_callbacks.each do |callback|
+      spawn do
+        begin
+          callback.call
+        rescue error
+          Log.error(exception: error) { "notifying cluster stable" }
+        end
+      end
     end
   end
 
-  protected def perform_rebalance(version : String)
-    if rebalance_cb = @on_rebalance
-      node_map = @hash.to_h
-      spawn { rebalance_cb.call(version, node_map) }
+  protected def perform_rebalance(version : String, hash, new_list)
+    the_nodes = [] of String
+    new_list.each do |key|
+      if uri = hash[key]?
+        the_nodes << uri
+      end
+    end
+    @rendezvous_hash = RendezvousHash.new(the_nodes)
+    ready_cb = Proc(Nil).new { ready(version) }
+    rebalance_callbacks.each do |callback|
+      spawn do
+        begin
+          callback.call(@rendezvous_hash, ready_cb)
+        rescue error
+          Log.error(exception: error) { "performing rebalance callback" }
+        end
+      end
     end
   end
 
   protected def get_new_node_list
-    new_list = @hash.keys
+    hash = @hash.to_h
+    new_list = hash.keys.sort!
 
     # find the leader, as the old leader might be offline
     delete = [] of String
@@ -240,6 +259,7 @@ class RedisServiceManager
       if @redis.get(node).nil?
         delete << node
         @hash.delete(node)
+        hash.delete(node)
       elsif !leader
         # Leader node should validate the whole cluster
         leader = node == node_key
@@ -248,13 +268,23 @@ class RedisServiceManager
     end
 
     # ensure this node is in the node list
-    if !leader && @hash[node_key]? != @uri
-      @hash[node_key] = @uri
-      new_list << node_key
-      new_list.sort!.uniq!
+    if hash[node_key]? != @uri
+      Log.warn { "registration lost for #{@uri}, re-registering" }
+      perform_registration
+      return {nil, new_list}
     end
 
-    new_list - delete
+    {hash, new_list - delete}
+  end
+
+  def nodes : RendezvousHash
+    if registered?
+      @rendezvous_hash
+    else
+      hash = @hash.to_h
+      keys = hash.keys.sort!
+      RendezvousHash.new(nodes: keys.map { |key| hash[key] })
+    end
   end
 end
 
