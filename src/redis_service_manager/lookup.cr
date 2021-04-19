@@ -7,7 +7,7 @@ class RedisServiceManager
     def initialize(service : String, @ttl : Time::Span = 5.seconds)
       @nodes = RendezvousHash.new
       @expires = Time.unix(0)
-      @hash_key = "service_#{service}_lookup"
+      @hash_key = "{service_#{service}}_lookup"
     end
 
     # Redis is passed in here as it's not threadsafe and this way we can have a

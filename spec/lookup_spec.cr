@@ -29,23 +29,26 @@ describe RedisServiceManager::Lookup do
       leader = "node2"
       channel.send nil
     end
+
     node1.start
-    Fiber.yield
     node2.start
-    channel.receive?
+    loop do
+      break if node1.cluster_size == 2
+      channel.receive?
+    end
 
     node1.cluster_size.should eq(2)
     node1.ready.should be_true
-    node1.leader.should be_true
     node2.cluster_size.should eq(2)
     node2.ready.should be_true
-    leader.should eq("node1")
 
     # Get the cluster state
     lookup = RedisServiceManager::Lookup.new("spec")
     redis = Redis::Client.boot(REDIS_URL)
     nodes = lookup.nodes(redis)
-    nodes.nodes.should eq(["http://node1/node1", "http://node2/node2"])
+
+    nodes.nodes.includes?("http://node1/node1").should be_true
+    nodes.nodes.includes?("http://node2/node2").should be_true
 
     node2.stop
     node1.stop

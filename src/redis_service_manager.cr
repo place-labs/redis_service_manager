@@ -8,8 +8,8 @@ class RedisServiceManager
     # @redis = Redis.new(url: redis)
     @redis = Redis::Client.boot(redis)
     @lock = Mutex.new(:reentrant)
-    @version_key = "service_#{@service}_version"
-    @hash_key = "service_#{@service}_lookup"
+    @version_key = "{service_#{@service}}_version"
+    @hash_key = "{service_#{@service}}_lookup"
     @hash = NodeHash.new(@hash_key, @redis)
   end
 
@@ -57,9 +57,12 @@ class RedisServiceManager
       @stopped = true
 
       # remove node and bump the version
-      @redis.del(node_key)
-      @hash.delete(node_key)
-      @redis.set(@version_key, ULID.generate)
+      @redis.multi(node_key, reconnect: true) do |transaction|
+        transaction.del(node_key)
+        # @hash.delete(node_key)
+        transaction.hdel(hash_key, node_key)
+        transaction.set(@version_key, ULID.generate)
+      end
     end
 
     Log.trace { "node stopped" }
@@ -109,7 +112,7 @@ class RedisServiceManager
   protected def generate_ulid
     @leader = false
     @ulid = ULID.generate
-    @node_key = "service_#{@service}.#{@ulid}"
+    @node_key = "{service_#{@service}}.#{@ulid}"
   end
 
   protected def register
@@ -119,11 +122,12 @@ class RedisServiceManager
     Log.trace { "registering node #{@ulid} in cluster" }
 
     # register this node
-    @redis.set(node_key, node_info.to_json, ex: @ttl)
-    @hash[node_key] = @uri
-
-    # expire the version
-    @redis.set(@version_key, ULID.generate)
+    @redis.multi(node_key, reconnect: true) do |transaction|
+      transaction.set(node_key, node_info.to_json, ex: @ttl)
+      transaction.hset(hash_key, node_key, @uri)
+      # expire the version
+      transaction.set(@version_key, ULID.generate)
+    end
 
     check_version(node_info)
   end
@@ -159,7 +163,7 @@ class RedisServiceManager
       @redis.set(node_key, node_info.to_json, ex: @ttl)
 
       # notify of rebalance
-      Log.trace { "cluster details updated, #{new_list.size} node detected, requesting rebalance on version #{version} and waiting for ready" }
+      Log.trace { "cluster details updated, #{new_list.size} nodes detected, requesting rebalance on version #{version} and waiting for ready" }
       perform_rebalance version
 
       # we'll give the node a tick before checking if cluster ready
