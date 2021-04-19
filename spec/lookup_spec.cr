@@ -30,6 +30,7 @@ describe RedisServiceManager::Lookup do
       channel.send nil
     end
     node1.start
+    Fiber.yield
     node2.start
     channel.receive?
 

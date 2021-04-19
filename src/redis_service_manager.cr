@@ -140,7 +140,11 @@ class RedisServiceManager
       Log.trace { "cluster update detected: node list changed #{new_list != node_keys}, version changed #{node_info.version != version}" }
 
       if @leader
-        version = verify_cluster(new_list) if node_info.version == version
+        if node_info.version == version
+          version = ULID.generate
+          @redis.set(@version_key, version)
+          Log.trace { "as leader, updating cluster to version #{version}" }
+        end
       elsif node_info.version == version
         # wait for new version as not the leader
         Log.trace { "ignoring cluster change, waiting for leader to update version" }
@@ -220,20 +224,6 @@ class RedisServiceManager
       node_map = @hash.to_h
       spawn { rebalance_cb.call(version, node_map) }
     end
-  end
-
-  protected def verify_cluster(new_list)
-    # the node list changed but the version didn't, leader must bump version
-    new_list.each do |node|
-      if @redis.get(node).nil?
-        @hash.delete(node)
-        Log.trace { "as leader, removed expired node from lookup #{node}" }
-      end
-    end
-    version = ULID.generate
-    @redis.set(@version_key, version)
-    Log.trace { "as leader, updating cluster to version #{version}" }
-    version
   end
 
   protected def get_new_node_list
