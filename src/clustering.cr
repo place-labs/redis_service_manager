@@ -27,10 +27,10 @@ abstract class Clustering
   end
 
   # registers this node with the cluster as a member
-  abstract def register : Nil
+  abstract def register : Bool
 
   # removes this node from the cluster as a member
-  abstract def unregister : Nil
+  abstract def unregister : Bool
 
   # is this node registered as part of the cluster
   abstract def registered? : Bool

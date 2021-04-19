@@ -38,21 +38,24 @@ class RedisServiceManager < Clustering
     @hash.to_h
   end
 
-  def register : Nil
+  def register : Bool
     @lock.synchronize do
-      return if @registered
+      return false if @registered
       @registered = true
+      @watching = true
       spawn do
         Log.trace { "node started" }
         maintain_registration
       end
     end
+    true
   end
 
-  def unregister : Nil
+  def unregister : Bool
     @lock.synchronize do
-      return unless @registered
+      return false unless @registered
       @registered = false
+      @watching = false
 
       # remove node and bump the version
       @redis.multi(node_key, reconnect: true) do |transaction|
@@ -64,9 +67,10 @@ class RedisServiceManager < Clustering
     end
 
     Log.trace { "node stopped" }
+    true
   end
 
-  def ready(version : String) : Nil
+  protected def ready(version : String) : Nil
     # update this nodes registration if latest version is ready
     return unless version == @version
     @lock.synchronize do
@@ -82,7 +86,7 @@ class RedisServiceManager < Clustering
 
   # Check if node is registered in the cluster
   # either join cluster or maintain registration
-  def maintain_registration
+  protected def maintain_registration
     delay = @ttl // 3
     delay = 1 if delay <= 0
 
