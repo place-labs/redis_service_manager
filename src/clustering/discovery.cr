@@ -4,6 +4,7 @@ class Clustering::Discovery
   def initialize(@cluster : Clustering, @ttl : Time::Span = 5.seconds)
     @nodes = RendezvousHash.new
     @last_updated = Time.unix(0)
+    @timer = Time.monotonic - (@ttl + 1.second)
     @mutex = Mutex.new
     @rebalance_callbacks = [] of RendezvousHash ->
     @cluster.on_rebalance { |nodes, _rebalance_complete_cb| @mutex.synchronize { update_node_list(nodes) } }
@@ -26,6 +27,7 @@ class Clustering::Discovery
         if expired?
           @nodes = @cluster.nodes
           @last_updated = Time.utc
+          @timer = Time.monotonic
         end
       end
       @nodes
@@ -35,6 +37,7 @@ class Clustering::Discovery
   protected def update_node_list(nodes : RendezvousHash)
     @nodes = nodes
     @last_updated = Time.utc
+    @timer = Time.monotonic
     rebalance_callbacks.each { |callback| perform(callback, nodes) }
   end
 
@@ -45,7 +48,7 @@ class Clustering::Discovery
   end
 
   protected def expired?
-    expired = @last_updated + @ttl
-    expired < Time.utc
+    elapsed = Time.monotonic - @timer
+    elapsed > @ttl
   end
 end
