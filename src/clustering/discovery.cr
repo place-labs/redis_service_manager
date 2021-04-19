@@ -38,7 +38,7 @@ class Clustering::Discovery
     @nodes = nodes
     @last_updated = Time.utc
     @timer = Time.monotonic
-    rebalance_callbacks.each { |callback| perform(callback, nodes) }
+    rebalance_callbacks.each { |callback| spawn { perform(callback, nodes) } }
   end
 
   protected def perform(callback, nodes)
