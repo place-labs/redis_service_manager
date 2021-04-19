@@ -18,8 +18,9 @@ class RedisServiceManager
 
       hash = NodeHash.new(@hash_key, redis).to_h
       keys = hash.keys.sort!
+      nodes = RendezvousHash.new(nodes: keys.map { |key| hash[key] })
       @expires = @ttl.from_now
-      @nodes = RendezvousHash.new(nodes: keys.map { |key| hash[key] })
+      @nodes = nodes
     end
   end
 end
