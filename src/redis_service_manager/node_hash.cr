@@ -21,13 +21,13 @@ class RedisServiceManager
       json_value
     end
 
-    def fetch(key)
+    def fetch(key, &)
       key = key.to_s
       entry = redis.hget(hash_key, key)
       entry ? entry.to_s : yield key
     end
 
-    def delete(key)
+    def delete(key, &)
       key = key.to_s
       value = self[key]?
       if value
@@ -53,12 +53,8 @@ class RedisServiceManager
       size == 0
     end
 
-    def to_h
-      hash = {} of String => String
-      redis.hgetall(hash_key).each_slice(2) do |slice|
-        hash[slice[0].to_s] = slice[1].to_s
-      end
-      hash
+    def to_h : Hash(String, String)
+      redis.hgetall(hash_key)
     end
 
     def clear

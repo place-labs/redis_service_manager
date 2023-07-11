@@ -11,7 +11,7 @@ class RedisServiceManager::NodeInfo
   property uri : String
 
   @[JSON::Field(key: "r")]
-  property ready : Bool
+  property? ready : Bool
 
   @[JSON::Field(key: "v")]
   property version : String

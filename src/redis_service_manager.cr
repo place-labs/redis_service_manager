@@ -5,7 +5,7 @@ require "./clustering"
 class RedisServiceManager < Clustering
   Log = ::Log.for("redis-service-manager")
 
-  def initialize(service : String, redis : String, @uri : String = "", @ttl : Int32 = 20)
+  def initialize(service : String, redis : String, @uri : String = "", @ttl : Int32 = 40)
     super(service)
 
     @redis = Redis::Client.boot(redis)
@@ -20,9 +20,9 @@ class RedisServiceManager < Clustering
   getter? registered : Bool = false
   getter? watching : Bool = false
 
-  getter leader : Bool = false
-  getter ready : Bool = false
-  getter cluster_ready : Bool = false
+  getter? leader : Bool = false
+  getter? ready : Bool = false
+  getter? cluster_ready : Bool = false
 
   getter ulid : String = ""
   getter hash_key : String = ""
@@ -212,7 +212,7 @@ class RedisServiceManager < Clustering
 
     # check for cluster ready
     node_info.each do |node, info|
-      if !info.ready
+      if !info.ready?
         Log.trace { "as leader #{@uri}, node is not ready: #{node} => #{info.uri}" }
         return
       end

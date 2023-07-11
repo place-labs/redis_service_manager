@@ -7,7 +7,7 @@ describe RedisServiceManager do
 
     # Start a 2 node cluster
     node1 = RedisServiceManager.new("spec", uri: "http://node1/node1", redis: REDIS_URL, ttl: 4)
-    node1.ready.should eq(false)
+    node1.ready?.should eq(false)
     node1.on_rebalance do |_nodes, rebalance_complete_cb|
       puts "REBALANCING NODE 1"
       rebalance_complete_cb.call
@@ -19,7 +19,7 @@ describe RedisServiceManager do
     end
 
     node2 = RedisServiceManager.new("spec", uri: "http://node2/node2", redis: REDIS_URL, ttl: 4)
-    node2.ready.should eq(false)
+    node2.ready?.should eq(false)
     node2.on_rebalance do |_nodes, rebalance_complete_cb|
       puts "REBALANCING NODE 2"
       rebalance_complete_cb.call
@@ -38,9 +38,9 @@ describe RedisServiceManager do
     end
 
     node1.cluster_size.should eq(2)
-    node1.ready.should be_true
+    node1.ready?.should be_true
     node2.cluster_size.should eq(2)
-    node2.ready.should be_true
+    node2.ready?.should be_true
 
     # Get the cluster state
     lookup = Clustering::Discovery.new RedisServiceManager.new("spec", REDIS_URL)
