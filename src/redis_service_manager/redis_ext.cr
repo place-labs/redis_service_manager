@@ -13,6 +13,7 @@ class Redis
   end
 
   module Cluster::Commands
+    # ameba:disable Lint/UselessAssign
     proxy getex, key, ex = nil, px = nil, exat = nil, pxat = nil
   end
 end
