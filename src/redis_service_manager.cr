@@ -5,7 +5,7 @@ require "./clustering"
 class RedisServiceManager < Clustering
   Log = ::Log.for("redis-service-manager")
 
-  def initialize(service : String, redis : String, @uri : String = "", @ttl : Int32 = 40)
+  def initialize(service : String, redis : String, @uri : String = "", @ttl : Int32 = 20)
     super(service)
 
     @redis = Redis::Client.boot(redis)
