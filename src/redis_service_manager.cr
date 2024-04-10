@@ -1,6 +1,6 @@
 require "log"
 require "ulid"
-require "./clustering"
+require "./redis_service_manager/clustering"
 
 class RedisServiceManager < Clustering
   Log = ::Log.for("redis-service-manager")
@@ -35,6 +35,7 @@ class RedisServiceManager < Clustering
   getter? ready : Bool = false
   getter? cluster_ready : Bool = false
 
+  getter uri : String
   getter ulid : String = ""
   getter hash_key : String = ""
   getter node_key : String = ""
