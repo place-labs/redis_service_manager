@@ -16,6 +16,15 @@ class RedisServiceManager < Clustering
     @rendezvous_hash = RendezvousHash.new
   end
 
+  def initialize(service : String, @redis : Redis::Client, @uri : String = "", @ttl : Int32 = 20, @lock : Mutex = Mutex.new(:reentrant))
+    super(service)
+
+    @version_key = "{service_#{service}}_version"
+    @hash_key = "{service_#{service}}_lookup"
+    @hash = NodeHash.new(@hash_key, @redis)
+    @rendezvous_hash = RendezvousHash.new
+  end
+
   getter version : String = ""
   getter? registered : Bool = false
   getter? watching : Bool = false
@@ -285,7 +294,7 @@ class RedisServiceManager < Clustering
     if registered?
       @rendezvous_hash
     else
-      hash = @hash.to_h
+      hash = @lock.synchronize { @hash.to_h }
       keys = hash.keys.sort!
       RendezvousHash.new(nodes: keys.map { |key| hash[key] })
     end
