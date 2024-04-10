@@ -1,7 +1,7 @@
 require "../redis_service_manager"
 require "json"
 
-class RedisServiceManager::NodeInfo
+struct RedisServiceManager::NodeInfo
   include JSON::Serializable
 
   def initialize(@uri, @version, @ready = false)

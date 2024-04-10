@@ -14,6 +14,7 @@ class RedisServiceManager < Clustering
     @hash_key = "{service_#{service}}_lookup"
     @hash = NodeHash.new(@hash_key, @redis)
     @rendezvous_hash = RendezvousHash.new
+    @node_info = NodeInfo.new(@uri, "")
   end
 
   def initialize(service : String, @redis : Redis::Client, @uri : String = "", @ttl : Int32 = 20, @lock : Mutex = Mutex.new(:reentrant))
@@ -23,6 +24,7 @@ class RedisServiceManager < Clustering
     @hash_key = "{service_#{service}}_lookup"
     @hash = NodeHash.new(@hash_key, @redis)
     @rendezvous_hash = RendezvousHash.new
+    @node_info = NodeInfo.new(@uri, "")
   end
 
   getter version : String = ""
@@ -36,6 +38,7 @@ class RedisServiceManager < Clustering
   getter ulid : String = ""
   getter hash_key : String = ""
   getter node_key : String = ""
+  getter node_info : NodeInfo
 
   getter node_keys : Array(String) = [] of String
 
@@ -54,7 +57,7 @@ class RedisServiceManager < Clustering
       @watching = true
       spawn do
         Log.trace { "node started" }
-        maintain_registration
+        registration_maintenance_loop
       end
     end
     true
@@ -81,12 +84,11 @@ class RedisServiceManager < Clustering
 
   protected def ready(version : String) : Nil
     # update this nodes registration if latest version is ready
-    return unless version == @version
     @lock.synchronize do
       return unless version == @version
 
       @ready = true
-      node_info = NodeInfo.new(@uri, version, ready: true)
+      @node_info = node_info = NodeInfo.new(@uri, version, ready: true)
       @redis.set(node_key, node_info.to_json, ex: @ttl)
     end
 
@@ -95,27 +97,31 @@ class RedisServiceManager < Clustering
 
   # Check if node is registered in the cluster
   # either join cluster or maintain registration
-  protected def maintain_registration
+  def maintain_registration
+    # get the current registration for this node and reset the timeout
+    @lock.synchronize do
+      return unless registered?
+
+      if @redis.getex(node_key, ex: @ttl)
+        check_version(@node_info)
+      else
+        perform_registration
+      end
+    end
+  rescue error
+    Log.error(exception: error) { "node registration failed" }
+  end
+
+  # this loop ensures all nodes in the cluster are aware of each other
+  # however registration maintenance can happen independently
+  protected def registration_maintenance_loop
     delay = @ttl // 3
     delay = 1 if delay <= 0
 
     loop do
-      begin
-        # get the current registration for this node and reset the timeout
-        @lock.synchronize do
-          break unless registered?
-
-          if node_info = @redis.getex(node_key, ex: @ttl)
-            check_version(NodeInfo.from_json(node_info))
-          else
-            perform_registration
-          end
-        end
-      rescue error
-        Log.error(exception: error) { "node registration failed" }
-      end
-
+      maintain_registration
       sleep delay
+      break unless registered?
     end
   end
 
@@ -128,7 +134,7 @@ class RedisServiceManager < Clustering
 
   protected def perform_registration
     generate_ulid
-    node_info = NodeInfo.new(@uri, @version)
+    @node_info = node_info = NodeInfo.new(@uri, @version)
 
     Log.trace { "registering node #{@ulid} in cluster" }
 
@@ -144,7 +150,20 @@ class RedisServiceManager < Clustering
   end
 
   protected def check_version(node_info : NodeInfo) : Nil
-    version = @redis.get(@version_key) || "not-set"
+    if version = @redis.get(@version_key)
+      if node_info.version != version || leader?
+        # perform a check of all nodes
+        update_node_lists(version)
+      elsif @redis.get(node_keys.first).nil?
+        # the leader has gone offline
+        update_node_lists(version)
+      end
+    else
+      update_node_lists("no-version")
+    end
+  end
+
+  protected def update_node_lists(version)
     hash, new_list = get_new_node_list
     return unless hash
 
@@ -171,7 +190,7 @@ class RedisServiceManager < Clustering
       @version = version
 
       # update this nodes registration
-      node_info = NodeInfo.new(@uri, version)
+      @node_info = node_info = NodeInfo.new(@uri, version)
       @redis.set(node_key, node_info.to_json, ex: @ttl)
 
       # notify of rebalance
