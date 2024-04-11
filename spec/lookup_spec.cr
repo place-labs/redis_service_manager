@@ -63,6 +63,11 @@ describe RedisServiceManager do
       URI.parse("http://node2/node2"),
     ]
 
+    lookup_local.node_hash.should eq({
+      node1.ulid => URI.parse("http://node1/node1"),
+      node2.ulid => URI.parse("http://node2/node2"),
+    })
+
     node2.unregister
     node1.unregister
   end

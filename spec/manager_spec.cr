@@ -292,6 +292,10 @@ describe RedisServiceManager do
     node2.leader?.should be_true
     node2.cluster_ready?.should be_true
     leader.should eq("node2")
+    node2.node_hash.should eq({
+      node2.ulid => URI.parse(node2.uri),
+      node3.ulid => URI.parse(node3.uri),
+    })
 
     node2.unregister
     node3.unregister

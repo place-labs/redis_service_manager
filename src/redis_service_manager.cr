@@ -27,7 +27,6 @@ class RedisServiceManager < Clustering
     @node_info = NodeInfo.new(@uri, "")
   end
 
-  getter version : String = ""
   getter? registered : Bool = false
   getter? watching : Bool = false
 
@@ -47,8 +46,9 @@ class RedisServiceManager < Clustering
     node_keys.size
   end
 
-  def cluster_nodes
-    @hash.to_h
+  def node_hash : Hash(String, URI)
+    hash = @lock.synchronize { @hash.to_h }.transform_keys(&.split("}.", 2)[1])
+    hash.transform_values { |uri| URI.parse(uri) }
   end
 
   def register : Bool

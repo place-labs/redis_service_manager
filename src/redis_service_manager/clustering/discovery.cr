@@ -67,6 +67,11 @@ class Clustering::Discovery
     rendezvous.nodes.map { |node| URI.parse(node) }
   end
 
+  # Returns the list of node IDs => URI mapping
+  def node_hash : Hash(String, URI)
+    @cluster.node_hash
+  end
+
   protected def update_node_list(rendezvous : RendezvousHash)
     @rendezvous = rendezvous
     @last_updated = Time.utc
