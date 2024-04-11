@@ -1,7 +1,10 @@
 require "redis-cluster"
 
 class RedisServiceManager
-  class NodeHash < Hash(String, String)
+  class NodeHash
+    include Enumerable({String, String})
+    include Iterable({String, String})
+
     def initialize(@hash_key : String, @redis : Redis::Client)
       super()
     end
@@ -27,6 +30,22 @@ class RedisServiceManager
       entry ? entry.to_s : yield key
     end
 
+    def fetch(key, default)
+      fetch(key) { default }
+    end
+
+    def [](key, & : String -> String)
+      fetch(key) { yield }
+    end
+
+    def [](key)
+      fetch(key) { raise KeyError.new "Missing hash key: #{key.inspect}" }
+    end
+
+    def []?(key)
+      fetch(key, nil)
+    end
+
     def delete(key, &)
       key = key.to_s
       value = self[key]?
@@ -35,6 +54,10 @@ class RedisServiceManager
         return value.to_s
       end
       yield key
+    end
+
+    def delete(key)
+      delete(key) { nil }
     end
 
     def keys
@@ -65,5 +88,7 @@ class RedisServiceManager
       end
       self
     end
+
+    delegate each, to: to_h
   end
 end
