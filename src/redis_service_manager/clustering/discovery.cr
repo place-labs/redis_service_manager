@@ -1,8 +1,9 @@
+require "uri"
 require "../clustering"
 
 class Clustering::Discovery
   def initialize(@cluster : Clustering, @ttl : Time::Span = 5.seconds)
-    @nodes = RendezvousHash.new
+    @rendezvous = RendezvousHash.new
     @last_updated = Time.unix(0)
     @timer = Time.monotonic - (@ttl + 1.second)
     @mutex = Mutex.new
@@ -12,37 +13,69 @@ class Clustering::Discovery
 
   getter last_updated : Time
   getter rebalance_callbacks : Array(RendezvousHash ->)
+  getter uri : URI { URI.parse @cluster.uri }
 
   def on_rebalance(&callback : RendezvousHash ->)
     @rebalance_callbacks << callback
   end
 
-  def nodes : RendezvousHash
-    if @cluster.watching? || !expired?
+  def rendezvous : RendezvousHash
+    if @cluster.watching?
+      @cluster.rendezvous
+    elsif !expired?
       # this is up to date as we are listening to cluster.on_rebalance callback
       # or the current list hasn't had its TTL expire
-      @nodes
+      @rendezvous
     else
       @mutex.synchronize do
         if expired?
-          @nodes = @cluster.nodes
+          @rendezvous = @cluster.rendezvous
           @last_updated = Time.utc
           @timer = Time.monotonic
         end
       end
-      @nodes
+      @rendezvous
     end
   end
 
-  protected def update_node_list(nodes : RendezvousHash)
-    @nodes = nodes
-    @last_updated = Time.utc
-    @timer = Time.monotonic
-    rebalance_callbacks.each { |callback| spawn { perform(callback, nodes) } }
+  # Consistent hash lookup
+  def find?(key : String) : URI?
+    rendezvous.find?(key).try { |node| URI.parse(node) }
   end
 
-  protected def perform(callback, nodes)
-    callback.call(nodes)
+  # Consistent hash lookup
+  def find(key : String) : URI
+    URI.parse(rendezvous.find(key))
+  end
+
+  def [](key)
+    find(key)
+  end
+
+  def []?(key)
+    find?(key)
+  end
+
+  # Determine if key maps to current node
+  def own_node?(key : String) : Bool
+    # don't parse into URI
+    rendezvous.find?(key) == @cluster.uri
+  end
+
+  # Returns the list of node URIs from the `rendezvous-hash`
+  def nodes : Array(URI)
+    rendezvous.nodes.map { |node| URI.parse(node) }
+  end
+
+  protected def update_node_list(rendezvous : RendezvousHash)
+    @rendezvous = rendezvous
+    @last_updated = Time.utc
+    @timer = Time.monotonic
+    rebalance_callbacks.each { |callback| spawn { perform(callback, rendezvous) } }
+  end
+
+  protected def perform(callback, rendezvous)
+    callback.call(rendezvous)
   rescue error
     Log.error(exception: error) { "rebalance callback failed" }
   end

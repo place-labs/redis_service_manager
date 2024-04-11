@@ -31,6 +31,7 @@ describe RedisServiceManager do
     end
 
     node1.register
+    sleep 0.1 # ensure node1 is master
     node2.register
     loop do
       break if node1.cluster_size == 2
@@ -44,9 +45,23 @@ describe RedisServiceManager do
 
     # Get the cluster state
     lookup = Clustering::Discovery.new RedisServiceManager.new("spec", REDIS_URL)
-    hash = lookup.nodes
+    hash = lookup.rendezvous
     hash.nodes.includes?("http://node1/node1").should be_true
     hash.nodes.includes?("http://node2/node2").should be_true
+
+    lookup.find?("test").should eq URI.parse("http://node2/node2")
+    lookup.find("test").should eq URI.parse("http://node2/node2")
+
+    lookup["testing"].should eq URI.parse("http://node1/node1")
+    lookup["testing"]?.should eq URI.parse("http://node1/node1")
+
+    lookup_local = Clustering::Discovery.new node1
+    lookup_local.own_node?("testing").should be_true
+    lookup_local.own_node?("test").should be_false
+    lookup_local.nodes.should eq [
+      URI.parse("http://node1/node1"),
+      URI.parse("http://node2/node2"),
+    ]
 
     node2.unregister
     node1.unregister

@@ -310,7 +310,7 @@ class RedisServiceManager < Clustering
     {hash, new_list - delete}
   end
 
-  def nodes : RendezvousHash
+  def rendezvous : RendezvousHash
     if registered?
       @rendezvous_hash
     else
@@ -318,6 +318,10 @@ class RedisServiceManager < Clustering
       keys = hash.keys.sort!
       RendezvousHash.new(nodes: keys.map { |key| hash[key] })
     end
+  end
+
+  def finalize
+    unregister
   end
 end
 

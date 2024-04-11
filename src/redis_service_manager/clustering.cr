@@ -14,6 +14,9 @@ abstract class Clustering
   getter rebalance_callbacks : Array((RendezvousHash, RebalanceComplete) ->)
   getter cluster_stable_callbacks : Array(->)
 
+  # the service uri for this host
+  abstract def uri : String
+
   # Called when the cluster has changed
   def on_rebalance(&callback : (RendezvousHash, RebalanceComplete) ->)
     rebalance_callbacks << callback
@@ -40,7 +43,7 @@ abstract class Clustering
   abstract def watching? : Bool
 
   # returns the list of known nodes
-  abstract def nodes : RendezvousHash
+  abstract def rendezvous : RendezvousHash
 end
 
 require "./clustering/*"
