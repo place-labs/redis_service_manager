@@ -31,7 +31,7 @@ describe RedisServiceManager do
     end
 
     node1.register
-    sleep 0.1 # ensure node1 is master
+    sleep 100.milliseconds # ensure node1 is master
     node2.register
     loop do
       break if node1.cluster_size == 2

@@ -270,7 +270,7 @@ describe RedisServiceManager do
     node3.ready?.should eq(false)
     node3.on_rebalance do |_nodes, rebalance_complete_cb|
       puts "REBALANCING NODE 3"
-      sleep 10
+      sleep 10.seconds
       rebalance_complete_cb.call
     end
     node3.on_cluster_stable do
@@ -299,5 +299,113 @@ describe RedisServiceManager do
 
     node2.unregister
     node3.unregister
+  end
+
+  it "should run callbacks if it re-joins the cluster" do
+    service_rand = rand(UInt16::MAX)
+
+    # NODE 1
+    channel1 = Channel(Nil).new
+    manager = RedisServiceManager.new("rejoin#{service_rand}", uri: "http://localhost:1234/rejoin1", redis: REDIS_URL, ttl: 4)
+    manager.on_rebalance do |_nodes, rebalance_complete_cb|
+      puts "REBALANCING 1"
+      rebalance_complete_cb.call
+    end
+    manager.on_cluster_stable do
+      puts "CLUSTER READY 1"
+      channel1.send nil
+    end
+    manager.register
+    channel1.receive?
+
+    # NODE 2
+    channel2 = Channel(Nil).new
+    manager2 = RedisServiceManager.new("rejoin#{service_rand}", uri: "http://localhost:1234/rejoin2", redis: REDIS_URL, ttl: 4)
+    manager2.on_rebalance do |_nodes, rebalance_complete_cb|
+      puts "REBALANCING 2"
+      rebalance_complete_cb.call
+      channel2.send nil
+    end
+    manager2.on_cluster_stable do
+      puts "CLUSTER READY 2 -- WARN: Not cluster primary"
+    end
+    manager2.register
+    channel2.receive?
+    channel1.receive?
+
+    sleep 0.5.seconds
+    manager2.simulate_crash
+    channel2.close
+    sleep 0.5.seconds
+
+    # NODE 2 Re-establishes
+    channel3 = Channel(Nil).new
+    manager2 = RedisServiceManager.new("rejoin#{service_rand}", uri: "http://localhost:1234/rejoin2", redis: REDIS_URL, ttl: 4)
+    manager2.on_rebalance do |_nodes, rebalance_complete_cb|
+      puts "REBALANCING 2 RE"
+      rebalance_complete_cb.call
+      channel3.send nil
+    end
+    manager2.on_cluster_stable do
+      puts "CLUSTER READY 2 RE -- WARN: Not cluster primary"
+    end
+    manager2.register
+
+    select
+    when channel3.receive
+    when timeout(5.seconds)
+      raise "rebalance failed...."
+    end
+
+    channel1.receive
+
+    manager.unregister
+    manager2.unregister
+  end
+
+  it "should recover from a split brain", focus: true do
+    service_rand = rand(UInt16::MAX)
+    send_signals = true
+
+    # NODE 1
+    channel1 = Channel(Nil).new
+    manager = RedisServiceManager.new("rejoin#{service_rand}", uri: "http://localhost:1234/rejoin1", redis: REDIS_URL, ttl: 4)
+    manager.on_rebalance do |_nodes, rebalance_complete_cb|
+      puts "REBALANCING 1 Split"
+      rebalance_complete_cb.call
+    end
+    manager.on_cluster_stable do
+      puts "CLUSTER READY 1 Split"
+      channel1.send nil if send_signals
+    end
+    manager.register
+    channel1.receive?
+
+    # NODE 2
+    channel2 = Channel(Nil).new
+    manager2 = RedisServiceManager.new("rejoin#{service_rand}", uri: "http://localhost:1234/rejoin2", redis: REDIS_URL, ttl: 4)
+    manager2.on_rebalance do |_nodes, rebalance_complete_cb|
+      puts "REBALANCING 2 Split"
+      rebalance_complete_cb.call
+      channel2.send nil if send_signals
+    end
+    manager2.on_cluster_stable do
+      puts "CLUSTER READY 2 Split -- WARN: Not cluster primary"
+    end
+    manager2.register
+    channel2.receive?
+    channel1.receive?
+
+    sleep 0.5.seconds
+    send_signals = false
+    manager2.simulate_split_brain do
+      send_signals = true
+    end
+
+    channel2.receive?
+    channel1.receive?
+
+    manager.unregister
+    manager2.unregister
   end
 end
