@@ -83,6 +83,26 @@ class RedisServiceManager < Clustering
     true
   end
 
+  def simulate_crash : Nil
+    Log.fatal { "simulating node crashed" }
+    @lock.synchronize do
+      @registered = false
+      @watching = false
+    end
+  end
+
+  def simulate_split_brain(&recovered) : Nil
+    Log.fatal { "simulating split brain" }
+    ttl_backup = @ttl
+    @ttl = 0
+
+    spawn do
+      sleep ttl_backup.seconds
+      @ttl = ttl_backup
+      recovered.call
+    end
+  end
+
   protected def ready(version : String) : Nil
     # update this nodes registration if latest version is ready
     @lock.synchronize do
@@ -121,7 +141,7 @@ class RedisServiceManager < Clustering
 
     loop do
       maintain_registration
-      sleep delay
+      sleep delay.seconds
       break unless registered?
     end
   end
