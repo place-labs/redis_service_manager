@@ -363,7 +363,7 @@ describe RedisServiceManager do
     manager2.unregister
   end
 
-  it "should recover from a split brain", focus: true do
+  it "should recover from a split brain" do
     service_rand = rand(UInt16::MAX)
     send_signals = true
 
@@ -404,8 +404,5 @@ describe RedisServiceManager do
 
     channel2.receive?
     channel1.receive?
-
-    manager.unregister
-    manager2.unregister
   end
 end

@@ -46,6 +46,10 @@ class RedisServiceManager < Clustering
     node_keys.size
   end
 
+  def generate_version
+    "#{cluster_size}-#{ULID.generate}"
+  end
+
   def node_hash : Hash(String, URI)
     hash = @lock.synchronize { @hash.to_h }.transform_keys(&.split("}.", 2)[1])
     hash.transform_values { |uri| URI.parse(uri) }
@@ -75,7 +79,7 @@ class RedisServiceManager < Clustering
         transaction.del(node_key)
         # @hash.delete(node_key)
         transaction.hdel(hash_key, node_key)
-        transaction.set(@version_key, ULID.generate)
+        transaction.set(@version_key, generate_version)
       end
     end
 
@@ -94,10 +98,10 @@ class RedisServiceManager < Clustering
   def simulate_split_brain(&recovered) : Nil
     Log.fatal { "simulating split brain" }
     ttl_backup = @ttl
-    @ttl = 0
+    @ttl = 1
 
     spawn do
-      sleep ttl_backup.seconds
+      sleep (2 * ttl_backup).seconds
       @ttl = ttl_backup
       recovered.call
     end
@@ -164,7 +168,7 @@ class RedisServiceManager < Clustering
       transaction.set(node_key, node_info.to_json, ex: @ttl)
       transaction.hset(hash_key, node_key, @uri)
       # expire the version
-      transaction.set(@version_key, ULID.generate)
+      transaction.set(@version_key, generate_version)
     end
 
     check_version(node_info)
@@ -172,24 +176,25 @@ class RedisServiceManager < Clustering
 
   protected def check_version(node_info : NodeInfo) : Nil
     if version = @redis.get(@version_key)
-      if node_info.version != version || leader?
+      version_cluster_size = (version.split('-', 2)[0].to_i rescue 0)
+      if leader? || (node_info.version != version || version_cluster_size != cluster_size)
         # perform a check of all nodes
-        update_node_lists(version)
+        update_node_lists(version, version_cluster_size)
       elsif @redis.get(node_keys.first).nil?
         # the leader has gone offline
-        update_node_lists(version)
+        update_node_lists(version, version_cluster_size)
       end
     else
-      update_node_lists("no-version")
+      update_node_lists("no-version", 0)
     end
   end
 
-  protected def update_node_lists(version)
+  protected def update_node_lists(version, version_cluster_size)
     hash, new_list = get_new_node_list
     return unless hash
 
     # check for new leader and update URIS
-    if new_list != node_keys || node_info.version != version
+    if new_list != node_keys || node_info.version != version || version_cluster_size != new_list.size
       @cluster_ready = @ready = false
       @leader = new_list.first? == node_key
 
@@ -197,7 +202,7 @@ class RedisServiceManager < Clustering
 
       if @leader
         if node_info.version == version
-          version = ULID.generate
+          version = generate_version
           @redis.set(@version_key, version)
           Log.trace { "as leader #{@uri}, updating cluster to version #{version}" }
         end
