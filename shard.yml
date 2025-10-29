@@ -1,5 +1,5 @@
 name: redis_service_manager
-version: 3.2.0
+version: 3.3.0
 
 dependencies:
   ulid:
@@ -7,8 +7,8 @@ dependencies:
     version: ">= 0.1"
 
   redis-cluster:
-    github: caspiano/redis-cluster.cr
-    version: ">= 0.8.4"
+    github: place-labs/redis-cluster.cr
+    version: ">= 0.8.6"
 
   rendezvous-hash:
     github: caspiano/rendezvous-hash
