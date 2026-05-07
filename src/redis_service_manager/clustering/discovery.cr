@@ -38,6 +38,10 @@ class Clustering::Discovery
     end
   end
 
+  def expire! : Nil
+    @mutex.synchronize { @timer = Time.instant - (@ttl + 1.second) }
+  end
+
   # Consistent hash lookup
   def find?(key : String) : URI?
     rendezvous.find?(key).try { |node| URI.parse(node) }
