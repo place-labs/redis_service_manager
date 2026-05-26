@@ -60,7 +60,7 @@ class RedisServiceManager < Clustering
       return false if @registered
       @registered = true
       @watching = true
-      spawn do
+      spawn(name: "redis_register") do
         Log.trace { "node started" }
         registration_maintenance_loop
       end
@@ -100,7 +100,7 @@ class RedisServiceManager < Clustering
     ttl_backup = @ttl
     @ttl = 1
 
-    spawn do
+    spawn(name: "redis_split") do
       sleep (2 * ttl_backup).seconds
       @ttl = ttl_backup
       recovered.call
@@ -276,7 +276,7 @@ class RedisServiceManager < Clustering
     Log.trace { "as leader #{@uri}, cluster is ready, all nodes are reporting ready" }
     @cluster_ready = true
     cluster_stable_callbacks.each do |callback|
-      spawn do
+      spawn(name: "redis_stable") do
         begin
           callback.call
         rescue error
@@ -296,7 +296,7 @@ class RedisServiceManager < Clustering
     @rendezvous_hash = RendezvousHash.new(the_nodes)
     ready_cb = Proc(Nil).new { ready(version) }
     rebalance_callbacks.each do |callback|
-      spawn do
+      spawn(name: "redis_rebalance") do
         begin
           callback.call(@rendezvous_hash, ready_cb)
         rescue error

@@ -80,7 +80,7 @@ class Clustering::Discovery
     @rendezvous = rendezvous
     @last_updated = Time.utc
     @timer = Time.instant
-    rebalance_callbacks.each { |callback| spawn { perform(callback, rendezvous) } }
+    rebalance_callbacks.each { |callback| spawn(name: "redis_node_list") { perform(callback, rendezvous) } }
   end
 
   protected def perform(callback, rendezvous)
